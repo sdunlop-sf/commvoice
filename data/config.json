@@ -1,0 +1,7 @@
+{
+  "app_name": "ComVoice",
+  "tagline": "Legal documents, in plain words.",
+  "official_suffixes": [
+    ".gov", ".gov.au", ".gov.uk", ".gov.in", ".gov.sg", ".gc.ca", ".govt.nz", ".europa.eu", ".gov.ie"
+  ]
+}

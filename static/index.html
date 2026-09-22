@@ -1,0 +1,135 @@
+<!doctype html>
+<html lang="en" data-size="m" data-contrast="normal">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ComVoice: legal documents in plain words</title>
+  <meta name="description" content="Upload a legal document and ask questions about it. Answers are in plain words, with the exact source shown.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:ital,wght@0,400;0,700;1,400&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <a class="skip" href="#chat">Skip to the chat</a>
+
+  <header class="top">
+    <div class="brand">
+      <span class="wordmark">ComVoice</span>
+      <span class="tagline" id="tagline">Legal documents, in plain words.</span>
+    </div>
+    <div class="tools">
+      <div class="sizes" role="group" aria-label="Text size">
+        <button type="button" data-size="s" aria-label="Smaller text" aria-pressed="false">A</button>
+        <button type="button" data-size="m" aria-label="Normal text" aria-pressed="true">A</button>
+        <button type="button" data-size="l" aria-label="Larger text" aria-pressed="false">A</button>
+      </div>
+      <button type="button" id="contrast" class="pill" aria-pressed="false">High contrast</button>
+    </div>
+  </header>
+
+  <main id="main">
+    <div id="offline" class="banner" hidden>
+      <strong>The AI part is not switched on yet</strong>, so I can't explain documents or answer questions.
+      <span id="offlineHint">The server can't find the API key.</span>
+    </div>
+
+    <div class="stage" id="stage">
+      <div class="mascot" id="mascot" data-state="idle" role="img" aria-label="Vox, the ComVoice helper">
+        <svg viewBox="0 0 300 290" width="200" height="193" aria-hidden="true">
+          <g class="bot">
+            <g class="waves" fill="none" stroke="#1D9E75" stroke-width="5" stroke-linecap="round" opacity="0">
+              <path d="M34 108Q22 125 34 142"/><path d="M20 96Q2 125 20 154"/>
+              <path d="M266 108Q278 125 266 142"/><path d="M280 96Q298 125 280 154"/>
+            </g>
+            <g class="dots" fill="#1D9E75" opacity="0"><circle class="dot" cx="266" cy="58" r="6"/><circle class="dot" cx="282" cy="40" r="7"/><circle class="dot" cx="298" cy="20" r="8"/></g>
+            <ellipse cx="110" cy="76" rx="17" ry="14" fill="#7F77DD"/><circle cx="110" cy="52" r="13" fill="#7F77DD"/>
+            <ellipse cx="150" cy="70" rx="17" ry="14" fill="#EF9F27"/><circle cx="150" cy="46" r="13" fill="#EF9F27"/>
+            <ellipse cx="190" cy="76" rx="17" ry="14" fill="#D4537E"/><circle cx="190" cy="52" r="13" fill="#D4537E"/>
+            <rect class="body" fill="#1D9E75" x="50" y="70" width="200" height="150" rx="60"/>
+            <path class="body" fill="#1D9E75" d="M92 212 L68 262 L138 216 Z"/>
+            <g class="eye"><ellipse cx="115" cy="125" rx="18" ry="20" fill="#fff"/><circle class="pupil" cx="115" cy="127" r="8" fill="#04342C"/></g>
+            <g class="eye"><ellipse cx="185" cy="125" rx="18" ry="20" fill="#fff"/><circle class="pupil" cx="185" cy="127" r="8" fill="#04342C"/></g>
+            <g class="mouth" fill="#fff">
+              <rect class="bar" x="118" y="168" width="8" height="14" rx="4"/>
+              <rect class="bar" x="132" y="168" width="8" height="14" rx="4"/>
+              <rect class="bar" x="146" y="168" width="8" height="14" rx="4"/>
+              <rect class="bar" x="160" y="168" width="8" height="14" rx="4"/>
+              <rect class="bar" x="174" y="168" width="8" height="14" rx="4"/>
+            </g>
+            <circle cx="222" cy="196" r="15" fill="#fff"/>
+            <path d="M222 186V206M212 189H232M212 189L208 198H216ZM232 189L228 198H236Z" fill="none" stroke="#0F6E56" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            <g class="nope" opacity="0"><rect x="6" y="176" width="30" height="38" rx="4" fill="#fff" stroke="#8C3416" stroke-width="3"/><path d="M12 188H30M12 196H30M12 204H24" stroke="#8C3416" stroke-width="3" stroke-linecap="round"/><path d="M2 218L40 172" stroke="#D85A30" stroke-width="5" stroke-linecap="round"/></g>
+          </g>
+        </svg>
+      </div>
+      <p class="caption" id="caption" aria-live="polite">Hi, I'm Vox. Add a document and ask me about it.</p>
+    </div>
+
+    <section class="welcome" id="welcome" aria-labelledby="welcomeTitle">
+      <h1 id="welcomeTitle">Understand any legal document in plain words</h1>
+      <p>Upload a contract, agreement, notice or council document. I explain it in everyday words, explain the hard legal terms, and answer your questions from what it says. If it isn't in your document, I'll tell you instead of guessing.</p>
+      <div class="cta">
+        <button type="button" class="btn" id="welcomeUpload">Upload a document</button>
+        <button type="button" class="btn ghost" id="trySample">Try a sample</button>
+      </div>
+      <p class="hint">PDF, Word (.docx) or text files up to <span id="maxMb">15</span> MB. Photos and scans can't be read yet.</p>
+      <p class="hint">Your file is read in memory for this chat only and is not saved on disk. Its text is sent to <span id="providerName">an AI service</span> to write the answers, so only upload what you are allowed to share. On Google's free tier, Google may use what you send to improve its products, so don't upload confidential documents unless the key has billing turned on.</p>
+    </section>
+
+    <div class="docbar" id="docbar" hidden>
+      <span class="docname" id="docName"></span>
+      <span class="hint" id="docMeta"></span>
+      <button type="button" class="link" id="newDoc">Start a new document</button>
+    </div>
+
+    <div class="chat" id="chat" tabindex="-1" aria-live="polite" aria-relevant="additions"></div>
+
+    <div class="ideas" id="ideas" role="region" aria-label="Question ideas" hidden>
+      <p class="ideas-title">Not sure what to ask? Tap one.</p>
+      <div class="chips" id="ideaChips"></div>
+      <div class="ideas-actions">
+        <button type="button" class="link" id="moreIdeas">More ideas</button>
+        <button type="button" class="link" id="closeIdeas">Close</button>
+      </div>
+    </div>
+
+    <form class="linkform" id="linkForm" hidden>
+      <label class="sr" for="linkUrl">Web link starting with https://</label>
+      <input id="linkUrl" type="url" inputmode="url" placeholder="https://..." autocomplete="off" maxlength="2000">
+      <button type="submit" class="btn">Add link</button>
+      <button type="button" class="btn ghost" id="cancelLink">Cancel</button>
+    </form>
+
+    <div class="composer-wrap">
+      <div class="menu" id="menu" role="menu" aria-label="Add something" hidden>
+        <button type="button" role="menuitem" id="menuUpload">Upload a document</button>
+        <button type="button" role="menuitem" id="menuLink">Add a web link</button>
+      </div>
+      <form class="composer" id="askForm" autocomplete="off">
+        <button type="button" class="icon-btn plus" id="plus" aria-label="Add a document or link" aria-haspopup="menu" aria-expanded="false" title="Add a document or link">
+          <svg viewBox="0 0 24 24" width="24" height="24" aria-hidden="true"><path d="M12 5v14M5 12h14" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+        </button>
+        <label class="sr" for="q">Your question</label>
+        <textarea id="q" rows="1" maxlength="4000" placeholder="Add a document with +" enterkeyhint="send"></textarea>
+        <button type="button" class="icon-btn" id="mic" aria-label="Hold to speak" title="Hold to speak">
+          <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 0 0-6 0v6a3 3 0 0 0 3 3Zm5-3a5 5 0 0 1-10 0M12 17v4M9 21h6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+        <button type="submit" class="btn" id="send">Ask</button>
+      </form>
+      <div class="voice-row">
+        <label class="switch"><input type="checkbox" id="voiceOn" checked><span>Read answers aloud</span></label>
+        <button type="button" class="link" id="stopVoice">Stop</button>
+        <span class="hint" id="micNote" hidden>Voice input isn't supported in this browser. Please type your question.</span>
+      </div>
+    </div>
+    <input type="file" id="file" accept=".pdf,.docx,.txt,.md,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>
+  </main>
+
+  <footer class="foot">
+    <p>ComVoice explains what a document says. It is not legal advice and it can make mistakes. For anything that matters, check with a lawyer or the office that gave you the document.</p>
+  </footer>
+
+  <script src="/static/app.js" defer></script>
+</body>
+</html>

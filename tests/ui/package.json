@@ -1,0 +1,6 @@
+{
+  "name": "comvoice-ui-tests",
+  "private": true,
+  "scripts": { "test": "node ui_test.js" },
+  "devDependencies": { "jsdom": "^30.1.0" }
+}
