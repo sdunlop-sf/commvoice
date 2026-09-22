@@ -16,7 +16,12 @@ Files:
    The key is stored **only in your browser** (`localStorage`) — it is never committed to the
    repo, never sent to this website, only to Google's Gemini API.
 2. Click **Open the sample & explain it** → Gemini writes a plain-words overview.
-3. **Ask anything in your own words**, by typing or voice. The assistant answers **only from the
+3. **(Optional) natural voice** — expand *"Optional: natural voice with ElevenLabs"* and paste an
+   ElevenLabs API key (from [elevenlabs.io](https://elevenlabs.io/app/settings/api-keys)). The demo
+   then fetches the voices on that account, lets you **choose one from a dropdown** and preview it,
+   and reads answers aloud in that natural voice. Without a key, answers use the browser's built-in
+   voice. The ElevenLabs key is also stored only in your browser.
+4. **Ask anything in your own words**, by typing or voice. The assistant answers **only from the
    document** and shows the exact quote + page. Ask something not covered (e.g. council rates)
    and it declines honestly instead of guessing.
 

@@ -95,6 +95,8 @@
     .keyrow { display:flex; gap:.5rem; flex-wrap:wrap; align-items:center; }
     .keyrow input { flex:1 1 18rem; min-width:0; font:inherit; border:2px solid var(--ink2); border-radius:6px; padding:0 .7rem; min-height:2.9rem; }
     .keystate { font-size:.85rem; }
+    .voicecfg { margin-top: .9rem; border-top: 1px solid var(--line); padding-top: .6rem; }
+    .voicecfg > summary { cursor: pointer; font-weight: 700; color: var(--blue-d); padding: .3rem 0; }
 
     .docbar { display: flex; align-items: baseline; flex-wrap: wrap; gap: .3rem .8rem; border-block: 1px solid var(--line); padding: .5rem 0; margin: .8rem 0; }
     .docname { font-weight: 700; overflow-wrap: anywhere; color: var(--navy); }
@@ -199,6 +201,23 @@
         <button type="button" class="link" id="clearKey" hidden>Disconnect / clear key</button>
       </div>
       <p class="keystate hint" id="keyState"></p>
+
+      <details class="voicecfg" id="voiceCfg">
+        <summary>Optional: natural voice with ElevenLabs</summary>
+        <p class="hint">Without this, answers are read by your browser's built-in voice. Add an ElevenLabs API key for a natural, human-sounding voice you can choose. The key is stored only in this browser. Get one at <a href="https://elevenlabs.io/app/settings/api-keys" target="_blank" rel="noopener">elevenlabs.io</a>.</p>
+        <div class="keyrow">
+          <label class="sr" for="elKey">ElevenLabs API key</label>
+          <input id="elKey" type="password" placeholder="Paste your ElevenLabs API key (optional)" autocomplete="off" spellcheck="false">
+          <button type="button" class="btn ghost" id="saveElKey">Connect voice</button>
+          <button type="button" class="link" id="clearElKey" hidden>Remove voice key</button>
+        </div>
+        <div class="keyrow" id="voicePickRow" hidden style="margin-top:.5rem">
+          <label for="voiceSel" style="font-weight:600">Voice</label>
+          <select id="voiceSel" style="flex:1 1 14rem;min-width:0;font:inherit;min-height:2.9rem;border:2px solid var(--ink2);border-radius:6px;padding:0 .5rem;background:#fff;color:var(--ink)"></select>
+          <button type="button" class="link" id="previewVoice">Preview</button>
+        </div>
+        <p class="keystate hint" id="elKeyState"></p>
+      </details>
     </div>
 
     <div class="card" id="welcome">
@@ -271,6 +290,15 @@
     // Tried in order; if one is overloaded (503) we fall back to the next.
     const MODELS = ['gemini-flash-latest', 'gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-2.5-flash-lite'];
 
+    // ElevenLabs (optional, browser-direct). Mirrors the server app's voice.py defaults.
+    const EL_KEY_STORE = 'commvoice_elevenlabs_key';
+    const EL_VOICE_STORE = 'commvoice_elevenlabs_voice';
+    const EL_TTS_MODEL = 'eleven_flash_v2_5';
+    const EL_DEFAULT_VOICE = 'IKne3meq5aSn9XLyUdCD'; // "Charlie", premade Australian voice
+    let elKey = '', elVoice = '';
+    try { elKey = localStorage.getItem(EL_KEY_STORE) || ''; } catch (e) {}
+    try { elVoice = localStorage.getItem(EL_VOICE_STORE) || EL_DEFAULT_VOICE; } catch (e) { elVoice = EL_DEFAULT_VOICE; }
+
     let apiKey = '';
     try { apiKey = localStorage.getItem(KEY_STORE) || ''; } catch (e) {}
     let started = false, busy = false;
@@ -307,6 +335,71 @@
       apiKey = '';
       try { localStorage.removeItem(KEY_STORE); } catch (e) {}
       setConn(false);
+    });
+
+    // ---------- ElevenLabs voice wiring ----------
+    async function loadVoices() {
+      const sel = $('#voiceSel');
+      sel.innerHTML = '';
+      try {
+        const res = await fetch('https://api.elevenlabs.io/v2/voices?page_size=100', { headers: { 'xi-api-key': elKey } });
+        if (!res.ok) throw Object.assign(new Error('list failed'), { status: res.status });
+        const data = await res.json();
+        const voices = (data.voices || []);
+        if (!voices.length) throw new Error('no voices');
+        for (const v of voices) {
+          const label = v.name + (v.labels && v.labels.accent ? ` — ${v.labels.accent}` : '') + (v.category ? ` (${v.category})` : '');
+          sel.append(h('option', { value: v.voice_id }, label));
+        }
+        // ensure our default is present even if the account doesn't list it
+        if (![...sel.options].some(o => o.value === elVoice)) {
+          if ([...sel.options].some(o => o.value === EL_DEFAULT_VOICE)) elVoice = EL_DEFAULT_VOICE;
+          else elVoice = sel.options[0].value;
+        }
+        sel.value = elVoice;
+        $('#voicePickRow').hidden = false;
+        $('#elKeyState').textContent = `Voice connected (ElevenLabs). ${voices.length} voices available. Your key is saved in this browser only.`;
+        return true;
+      } catch (e) {
+        $('#voicePickRow').hidden = true;
+        $('#elKeyState').textContent = friendlyVoiceError(e) + ' The browser voice will be used instead.';
+        return false;
+      }
+    }
+
+    function setVoiceConn(on) {
+      $('#clearElKey').hidden = !on;
+      $('#saveElKey').textContent = on ? 'Reconnect voice' : 'Connect voice';
+    }
+
+    async function adoptElKey(v) {
+      v = (v || '').trim();
+      if (!v) return false;
+      elKey = v;
+      try { localStorage.setItem(EL_KEY_STORE, v); } catch (e) {}
+      $('#elKey').value = '';
+      const ok = await loadVoices();
+      setVoiceConn(!!elKey);
+      if (ok) { $('#voiceOn').checked = true; }
+      return true;
+    }
+
+    $('#saveElKey').addEventListener('click', () => {
+      if (!adoptElKey($('#elKey').value) && !elKey) $('#elKeyState').textContent = 'Please paste an ElevenLabs key first.';
+    });
+    $('#clearElKey').addEventListener('click', () => {
+      elKey = '';
+      try { localStorage.removeItem(EL_KEY_STORE); } catch (e) {}
+      $('#voicePickRow').hidden = true;
+      setVoiceConn(false);
+      $('#elKeyState').textContent = 'Voice key removed. Answers will use the browser voice.';
+    });
+    $('#voiceSel').addEventListener('change', (e) => {
+      elVoice = e.target.value;
+      try { localStorage.setItem(EL_VOICE_STORE, elVoice); } catch (e) {}
+    });
+    $('#previewVoice').addEventListener('click', () => {
+      speak('Hi, I\'m here to help you understand what this document means for you and your community.');
     });
 
     // ---------- Gemini call ----------
@@ -425,8 +518,14 @@
       return el;
     }
 
-    // ---------- speech ----------
-    function speak(t) {
+    // ---------- speech (ElevenLabs if connected, else the browser's own voice) ----------
+    let currentAudio = null;
+    function stopSpeaking() {
+      try { if (window.speechSynthesis) speechSynthesis.cancel(); } catch (e) {}
+      if (currentAudio) { try { currentAudio.pause(); } catch (e) {} currentAudio = null; }
+    }
+
+    function browserSpeak(t) {
       try {
         if (!window.speechSynthesis) return;
         speechSynthesis.cancel();
@@ -434,6 +533,50 @@
         u.rate = 1; u.lang = 'en-AU';
         speechSynthesis.speak(u);
       } catch (e) {}
+    }
+
+    async function elevenTts(text, voiceId) {
+      const url = `https://api.elevenlabs.io/v1/text-to-speech/${voiceId || elVoice}?output_format=mp3_44100_128`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'xi-api-key': elKey, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: text.slice(0, 2000), model_id: EL_TTS_MODEL })
+      });
+      if (!res.ok) {
+        let detail = `ElevenLabs error (${res.status}).`;
+        try { const j = await res.json(); detail = (j.detail && (j.detail.message || j.detail)) || detail; } catch (e) {}
+        const err = new Error(typeof detail === 'string' ? detail : JSON.stringify(detail));
+        err.status = res.status; throw err;
+      }
+      return await res.blob();
+    }
+
+    async function speak(t) {
+      stopSpeaking();
+      const clean = (t || '').replace(/\s+/g, ' ').trim();
+      if (!clean) return;
+      if (elKey) {
+        try {
+          const blob = await elevenTts(clean);
+          const audio = new Audio(URL.createObjectURL(blob));
+          currentAudio = audio;
+          audio.onended = () => URL.revokeObjectURL(audio.src);
+          await audio.play();
+          return;
+        } catch (e) {
+          // fall back to the browser voice, and surface quota/key problems quietly
+          $('#elKeyState').textContent = 'Voice note: ' + friendlyVoiceError(e) + ' Using the browser voice for now.';
+        }
+      }
+      browserSpeak(clean);
+    }
+
+    function friendlyVoiceError(e) {
+      const m = (e && e.message) || '';
+      if (e && (e.status === 401 || e.status === 403)) return 'ElevenLabs didn’t accept that key.';
+      if (e && e.status === 429) return 'ElevenLabs quota reached or going too fast.';
+      if (/quota|credit/i.test(m)) return 'ElevenLabs credits are used up.';
+      return 'ElevenLabs didn’t respond.';
     }
 
     // ---------- ask ----------
@@ -557,8 +700,12 @@
       e.currentTarget.setAttribute('aria-pressed', on ? 'false' : 'true');
     });
 
+    // stop-speaking control on the voice row
+    $('#voiceOn').addEventListener('change', (e) => { if (!e.target.checked) stopSpeaking(); });
+
     // init
     setConn(!!apiKey);
+    if (elKey) { setVoiceConn(true); $('#voiceCfg').open = true; loadVoices(); }
   })();
   </script>
 </body>
