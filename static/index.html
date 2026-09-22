@@ -74,7 +74,7 @@
         <button type="button" class="btn ghost" id="trySample">Try a sample</button>
       </div>
       <p class="hint">PDF, Word (.docx) or text files up to <span id="maxMb">15</span> MB. Photos and scans can't be read yet.</p>
-      <p class="hint">Your file is read in memory for this chat only and is not saved on disk. Its text is sent to <span id="providerName">an AI service</span> to write the answers, so only upload what you are allowed to share. On Google's free tier, Google may use what you send to improve its products, so don't upload confidential documents unless the key has billing turned on.</p>
+      <p class="hint">Your file is read in memory for this chat only and is not saved on disk. Its text is sent to <span id="providerName">an AI service</span> to write the answers, so only upload what you are allowed to share. On Google's free tier, Google may use what you send to improve its products, so don't upload confidential documents unless the key has billing turned on.<span id="voiceNote" hidden> When you use the microphone or have answers read aloud, that audio and text also go to <span id="voiceProviderName">the voice service</span>.</span></p>
     </section>
 
     <div class="docbar" id="docbar" hidden>
@@ -121,6 +121,7 @@
         <label class="switch"><input type="checkbox" id="voiceOn" checked><span>Read answers aloud</span></label>
         <button type="button" class="link" id="stopVoice">Stop</button>
         <span class="hint" id="micNote" hidden>Voice input isn't supported in this browser. Please type your question.</span>
+        <audio id="voiceAudio" preload="none" hidden></audio>
       </div>
     </div>
     <input type="file" id="file" accept=".pdf,.docx,.txt,.md,application/pdf,text/plain,application/vnd.openxmlformats-officedocument.wordprocessingml.document" hidden>

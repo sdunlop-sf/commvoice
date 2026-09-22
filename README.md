@@ -134,6 +134,21 @@ Without a key the site loads and reads files, but can't explain or answer, and s
 
 Any host that runs `uvicorn app:app --host 0.0.0.0 --port $PORT` works. Documents live in memory, so a restart clears them (people just upload again). Run a single instance.
 
+## Voice with ElevenLabs (optional)
+
+Out of the box, ComVoice reads answers aloud with the browser's own voice and listens with the browser's speech recognition (Chrome, Edge and Safari; Firefox can only read aloud). Add an ElevenLabs key and both directions go through ElevenLabs instead: one consistent voice on every device, listening in 90+ languages, and Firefox gets a microphone.
+
+1. Sign in at https://elevenlabs.io, open the profile menu, choose **API keys** and create one. Under **Voices**, pick a voice and copy its ID.
+2. Add to `.env` (then restart the app):
+   ```
+   ELEVENLABS_API_KEY=your-key-here
+   ELEVENLABS_VOICE_ID=IKne3meq5aSn9XLyUdCD
+   ```
+   The voice ID is optional (the default is "Charlie", an Australian voice). `ELEVENLABS_TTS_MODEL` (default `eleven_flash_v2_5`) and `ELEVENLABS_STT_MODEL` (default `scribe_v2`) can also be set.
+3. `/api/health` reports `"tts": true, "stt": true` when the key is found.
+
+The key stays on the server: the page calls `POST /api/tts` (text in, MP3 out, repeats served from memory) and `POST /api/stt` (a recording in, text out). Both are rate limited (`TTS_LIMIT_PER_MIN` and `STT_LIMIT_PER_MIN`, default 30). If ElevenLabs is down or out of credits, the page falls back to the browser voice for reading aloud and tells you to type for questions. What you say into the microphone and the answers read aloud are sent to ElevenLabs, and the welcome card says so when voice is on.
+
 ## Tuning the bot's style
 
 `data/tuning.md` is a plain text file that steers the bot's **tone and wording**. It is switched on and comes filled in with a community-communication style guide: plain everyday words instead of planning jargon, warm and balanced wording, careful about what is approved versus proposed, and clear about affordable housing.
@@ -186,6 +201,7 @@ This was built and tested **without a live API key**. Everything above passes, b
 app.py              FastAPI app: upload, overview, ask, link reading, sessions, security
 ai.py               The four gates, the overview, labelled legal-word meanings
 llm.py              One small door to Google Gemini (forced function calls, retries, plain-words errors)
+voice.py            One small door to ElevenLabs (voice in and out), optional; browser voice otherwise
 check_key.py        Checks your API key works, in plain words
 test_model.py       One-line reply from the model, or a list of models your key can use
 documents.py        Reading PDF / Word / text, finding links, exact-quote and number checks

@@ -37,6 +37,9 @@
     hint: '',
     maxQuestion: 4000,
     maxMb: 15,
+    tts: false, // the server can read aloud (ElevenLabs); else the browser's own voice
+    stt: false, // the server can transcribe (ElevenLabs); else the browser's own recognition
+    maxTts: 2000,
   };
 
   const CAPTIONS = {
@@ -116,6 +119,15 @@
   const Rec = window.SpeechRecognition || window.webkitSpeechRecognition;
   let listening = false;
   let rec = null;
+  // Server voice (ElevenLabs): answers play through an <audio> element, the mic records with MediaRecorder.
+  const audioEl = $('#voiceAudio');
+  let audioUrl = null;
+  let speakSeq = 0;
+  let recorder = null;
+  let recChunks = [];
+  let recStream = null;
+  let micHeld = false;
+  const canRecord = () => !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia && window.MediaRecorder);
 
   function pickVoice() {
     if (!synth) return null;
@@ -128,10 +140,50 @@
     );
   }
   function stopSpeaking() {
+    speakSeq += 1;
     if (synth) synth.cancel();
+    if (audioEl) {
+      audioEl.pause();
+      audioEl.removeAttribute('src');
+      audioEl.load();
+    }
+    if (audioUrl) {
+      URL.revokeObjectURL(audioUrl);
+      audioUrl = null;
+    }
   }
   function speak(text, { force = false, mode = 'speaking' } = {}) {
-    if (!synth || !(state.voiceOn || force)) {
+    if (!(state.voiceOn || force)) {
+      setMascot(mode);
+      idleSoon();
+      return;
+    }
+    if (state.tts && audioEl) {
+      speakCloud(text, mode);
+      return;
+    }
+    speakLocal(text, mode);
+  }
+  async function speakCloud(text, mode) {
+    stopSpeaking();
+    const token = speakSeq;
+    setMascot(mode);
+    let res = null;
+    try {
+      res = await fetch('/api/tts', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: text.slice(0, state.maxTts) }) });
+    } catch (e) { res = null; }
+    if (token !== speakSeq) return; // something newer started meanwhile
+    if (!res || !res.ok) { speakLocal(text, mode); return; } // ElevenLabs trouble: the browser voice takes over
+    const blob = await res.blob();
+    if (token !== speakSeq) return;
+    audioUrl = URL.createObjectURL(blob);
+    audioEl.src = audioUrl;
+    audioEl.onended = () => { if (!listening) setMascot('idle'); };
+    audioEl.onerror = audioEl.onended;
+    audioEl.play().catch(() => speakLocal(text, mode));
+  }
+  function speakLocal(text, mode) {
+    if (!synth) {
       setMascot(mode);
       idleSoon();
       return;
@@ -154,7 +206,10 @@
   }
 
   function startListening() {
-    if (!Rec || listening || state.busy) return;
+    if (listening || state.busy) return;
+    micHeld = true;
+    if (state.stt && canRecord()) { startRecording(); return; }
+    if (!Rec) return;
     stopSpeaking();
     try { rec = new Rec(); } catch (e) { return; }
     rec.lang = 'en-AU';
@@ -191,14 +246,76 @@
     }
   }
   function stopListening() {
+    micHeld = false;
+    if (recorder && listening) {
+      try { recorder.stop(); } catch (e) { /* already stopped */ }
+      return;
+    }
     if (rec && listening) {
       try { rec.stop(); } catch (e) { /* already stopped */ }
     }
   }
 
+  // Hold-to-talk through the server: record while the button is held, then send the recording to be written down.
+  async function startRecording() {
+    stopSpeaking();
+    let stream;
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    } catch (e) {
+      addProblem('The microphone is blocked. Allow it in your browser settings, or type your question.');
+      return;
+    }
+    if (!micHeld || listening || state.busy) { // the button was let go while the permission box was open
+      stream.getTracks().forEach((t) => t.stop());
+      return;
+    }
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) => window.MediaRecorder.isTypeSupported(m)) || '';
+    try {
+      recorder = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+    } catch (e) {
+      stream.getTracks().forEach((t) => t.stop());
+      addProblem("Recording isn't supported in this browser. Please type your question.");
+      return;
+    }
+    recStream = stream;
+    recChunks = [];
+    recorder.ondataavailable = (e) => { if (e.data && e.data.size) recChunks.push(e.data); };
+    recorder.onstop = () => {
+      const type = recorder.mimeType || mime || 'audio/webm';
+      if (recStream) recStream.getTracks().forEach((t) => t.stop());
+      recStream = null;
+      recorder = null;
+      transcribe(new Blob(recChunks, { type }));
+    };
+    recorder.start();
+    listening = true;
+    $('#mic').classList.add('live');
+    setMascot('listening');
+  }
+  async function transcribe(blob) {
+    listening = false;
+    $('#mic').classList.remove('live');
+    if (!blob || blob.size < 1000) { setMascot('idle'); return; } // a tap, not a hold
+    setMascot('thinking', 'Writing down what you said...');
+    const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
+    const r = await api(`/api/stt?filename=${encodeURIComponent('speech.' + ext)}`, { method: 'POST', headers: { 'Content-Type': blob.type || 'audio/webm' }, body: blob });
+    if (!r.ok) {
+      setMascot('idle');
+      addProblem(r.data.detail);
+      return;
+    }
+    const text = (r.data.text || '').trim();
+    $('#q').value = text;
+    autosize();
+    if (text) ask(text);
+    else setMascot('idle');
+  }
+
   function setupVoice() {
     const mic = $('#mic');
-    if (!Rec) {
+    const micWorks = !!Rec || (state.stt && canRecord());
+    if (!micWorks) {
       mic.hidden = true;
       $('#micNote').hidden = false;
     } else {
@@ -212,7 +329,7 @@
         if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); stopListening(); }
       });
     }
-    if (!synth) {
+    if (!synth && !state.tts) {
       $('#voiceOn').closest('label').hidden = true;
       $('#stopVoice').hidden = true;
     }
@@ -687,7 +804,6 @@
     loadPrefs();
     setupMenu();
     setupIdeas();
-    setupVoice();
     $('#askForm').addEventListener('submit', (e) => { e.preventDefault(); ask($('#q').value); });
     $('#q').addEventListener('input', autosize);
     $('#q').addEventListener('keydown', (e) => {
@@ -702,8 +818,16 @@
       if (r.data.max_upload_mb) { state.maxMb = r.data.max_upload_mb; $('#maxMb').textContent = state.maxMb; }
       if (r.data.tagline) $('#tagline').textContent = r.data.tagline;
       if (r.data.provider) $('#providerName').textContent = r.data.provider;
+      state.tts = !!r.data.tts;
+      state.stt = !!r.data.stt;
+      if (r.data.max_tts_chars) state.maxTts = r.data.max_tts_chars;
+      if (state.tts || state.stt) {
+        $('#voiceNote').hidden = false;
+        if (r.data.voice_provider) $('#voiceProviderName').textContent = r.data.voice_provider;
+      }
       showOfflineBanner();
     }
+    setupVoice(); // after health, so it knows which voice path to use
   }
 
   init();
